@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ThreeJS from './ThreeJS';
 import './App.css';
 import Controls from './components/Controls';
@@ -12,6 +12,18 @@ const App = () => {
     footHead: 0,
   });
   const [randomize, setRandomize] = useState(false);
+
+  // Effect to randomize translation values when randomize is toggled
+  useEffect(() => {
+    if (randomize) {
+      const randomTranslation = {
+        pushPull: Math.random() * 10 - 5,  // Random value between -5 and 5
+        raiseLower: Math.random() * 10 - 5, // Random value between -5 and 5
+        footHead: Math.random() * 10 - 5,   // Random value between -5 and 5
+      };
+      setTranslation(randomTranslation);
+    }
+  }, [randomize]);
 
   return (
     <div className='container'>
@@ -37,4 +49,3 @@ const App = () => {
 };
 
 export default App;
-

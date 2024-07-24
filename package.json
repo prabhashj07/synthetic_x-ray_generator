@@ -15,6 +15,7 @@
     "cornerstone-core": "^2.6.1",
     "cornerstone-wado-image-loader": "^4.13.2",
     "mz-react-round-slider": "^1.0.3",
+    "nifti-reader-js": "^0.6.8",
     "rc-knob": "^1.0.1",
     "rc-slider": "^10.6.2",
     "react": "^18.3.1",
@@ -22,6 +23,7 @@
     "react-dom": "^18.3.1",
     "react-scripts": "^5.0.1",
     "three": "^0.165.0",
+    "three-voxel": "^1.0.0",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
