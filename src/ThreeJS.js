@@ -1,119 +1,111 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as nifti from 'nifti-reader-js';
 import * as THREE from 'three';
-import niftiReader from './libs/nifti-reader.js'; // Updated import path
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-const ThreeJS = ({ rotation, tilt, translation }) => {
-  const mountRef = useRef(null);
-  const [niftiHeader, setNiftiHeader] = useState(null);
-  const [niftiImage, setNiftiImage] = useState(null);
-  const [slice, setSlice] = useState(0);
+const ThreeJS = ({ rotation, tilt, translation, file }) => {
+    const mountRef = useRef(null);
+    const [niftiHeader, setNiftiHeader] = useState(null);
+    const [niftiImage, setNiftiImage] = useState(null);
+    const [slice, setSlice] = useState(0);
 
-  useEffect(() => {
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xeeeeee);
+    const readNIFTI = useCallback((data) => {
+        console.log("Attempting to read NIFTI data");
+        try {
+            if (nifti.isCompressed(data)) {
+                console.log("Data is compressed, decompressing...");
+                data = nifti.decompress(data);
+            }
 
-    const camera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
-    camera.position.z = 50;
+            if (nifti.isNIFTI(data)) {
+                console.log("Valid NIFTI data found");
+                const header = nifti.readHeader(data);
+                const image = nifti.readImage(header, data);
 
-    const renderer = new THREE.WebGLRenderer();
-    renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-    mountRef.current.appendChild(renderer.domElement);
+                console.log("Header:", header);
+                console.log("Image data length:", image.length);
 
-    const loadNiftiFile = async (url) => {
-      try {
-        const { header, image } = await niftiReader.readNiftiFile(url);
-        setNiftiHeader(header);
-        setNiftiImage(image);
+                setNiftiHeader(header);
+                setNiftiImage(image);
 
-        const slices = header.dims[3];
-        setSlice(Math.round(slices / 2));
-      } catch (error) {
-        console.error('Error loading NIfTI file:', error);
-      }
-    };
+                const slices = header.dims[3];
+                setSlice(Math.floor(slices / 2));
+            } else {
+                console.error("Not a valid NIFTI file");
+            }
+        } catch (error) {
+            console.error("Error reading NIFTI file:", error);
+        }
+    }, []);
 
-    loadNiftiFile('./CT_Abdo.nii.gz'); // Ensure the path is correct
+    useEffect(() => {
+        if (file) {
+            console.log("File received in ThreeJS component:", file.name);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                console.log("File loaded, calling readNIFTI");
+                const arrayBuffer = e.target.result;
+                readNIFTI(arrayBuffer);
+            };
+            reader.onerror = (e) => {
+                console.error("Error reading file:", e);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    }, [file, readNIFTI]);
 
-    const animate = () => {
-      requestAnimationFrame(animate);
+    useEffect(() => {
+        if (!niftiHeader || !niftiImage || !mountRef.current) return;
 
-      scene.children.forEach((mesh) => {
-        mesh.rotation.y = rotation;
-        mesh.rotation.x = tilt;
-      });
+        const width = mountRef.current.clientWidth;
+        const height = mountRef.current.clientHeight;
 
-      renderer.render(scene, camera);
-    };
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
 
-    animate();
+        renderer.setSize(width, height);
+        mountRef.current.appendChild(renderer.domElement);
 
-    const mountElement = mountRef.current;
+        // Convert NIFTI image to THREE.DataTexture
+        const sliceIndex = slice * niftiHeader.dims[1] * niftiHeader.dims[2];
+        const sliceData = new Uint8Array(niftiImage.buffer, sliceIndex, niftiHeader.dims[1] * niftiHeader.dims[2]);
 
-    return () => {
-      if (mountElement) {
-        mountElement.removeChild(renderer.domElement);
-      }
-    };
-  }, [rotation, tilt, translation]);
+        const texture = new THREE.DataTexture(sliceData, niftiHeader.dims[1], niftiHeader.dims[2], THREE.LuminanceFormat);
+        texture.needsUpdate = true;
 
-  useEffect(() => {
-    if (niftiHeader && niftiImage) {
-      const cols = niftiHeader.dims[1];
-      const rows = niftiHeader.dims[2];
-      const depth = niftiHeader.dims[3];
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const material = new THREE.MeshBasicMaterial({ map: texture });
+        const plane = new THREE.Mesh(geometry, material);
+        scene.add(plane);
 
-      const textureData = new Uint8Array(cols * rows);
-      const sliceSize = cols * rows;
-      const sliceOffset = sliceSize * slice;
+        camera.position.z = 5;
 
-      for (let i = 0; i < sliceSize; i++) {
-        textureData[i] = niftiImage[sliceOffset + i];
-      }
+        const controls = new OrbitControls(camera, renderer.domElement);
 
-      const texture = new THREE.DataTexture(textureData, cols, rows, THREE.LuminanceFormat);
-      texture.needsUpdate = true;
+        const animate = () => {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        };
 
-      const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-      const geometry = new THREE.PlaneGeometry(20, 20, 1, 1);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.z = 0;
+        animate();
 
-      const scene = new THREE.Scene();
-      scene.add(mesh);
+        const mountNode = mountRef.current;
 
-      const camera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
-      camera.position.z = 50;
+        return () => {
+            if (mountNode) {
+                mountNode.removeChild(renderer.domElement);
+            }
+            geometry.dispose();
+            material.dispose();
+            renderer.dispose();
+        };
+    }, [niftiHeader, niftiImage, slice, rotation, tilt, translation]);
 
-      const renderer = new THREE.WebGLRenderer();
-      renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
-      mountRef.current.appendChild(renderer.domElement);
-
-      const animate = () => {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
-      };
-
-      animate();
-    }
-  }, [niftiHeader, niftiImage, slice]);
-
-  const handleSliderChange = (event) => {
-    setSlice(event.target.value);
-  };
-
-  return (
-    <div>
-      <div ref={mountRef} style={{ width: '100%', height: '100%' }}></div>
-      <input
-        type="range"
-        min="0"
-        max={niftiHeader ? niftiHeader.dims[3] - 1 : 0}
-        value={slice}
-        onChange={handleSliderChange}
-        style={{ width: '100%' }}
-      />
-    </div>
-  );
+    return (
+        <div ref={mountRef} style={{ width: '100%', height: '400px' }}></div>
+    );
 };
 
 export default ThreeJS;

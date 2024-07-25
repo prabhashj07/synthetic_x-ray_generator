@@ -1,9 +1,16 @@
 import React from 'react';
-import { Slider, TextField, FormControlLabel, Checkbox } from '@mui/material';
+import { Slider, TextField } from '@mui/material';
 
-const TranslationControl = ({ translation, setTranslation, randomize, setRandomize }) => {
-  
+const TranslationControl = ({ translation, setTranslation }) => {
+
   const handleTranslationChange = (key, value) => {
+    // Ensure 'raiseLower' slider value does not exceed the range
+    if (value < -100) {
+      value = -100;
+    }
+    if (value > 100) {
+      value = 100;
+    }
     setTranslation({ ...translation, [key]: value });
   };
 
@@ -24,20 +31,9 @@ const TranslationControl = ({ translation, setTranslation, randomize, setRandomi
             onChange={(e, newValue) => handleTranslationChange(key, newValue)}
             aria-labelledby={`${key}-slider`}
             className='translation-slider'
-            min={key === 'raiseLower' ? 0 : -100}
-            max={key === 'raiseLower' ? 100 : 100}
+            min={-100} // Allow negative values
+            max={100}
           />
-          {key === 'footHead' && (
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={randomize}
-                  onChange={(e) => setRandomize(e.target.checked)}
-                />
-              }
-              label='Randomize'
-            />
-          )}
         </div>
       ))}
     </>
